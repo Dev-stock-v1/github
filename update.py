@@ -1,9 +1,11 @@
 import json, sys
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from string import Template
 import os
 import numpy as np, pandas as pd
 os.makedirs('docs', exist_ok=True)
+NOW = datetime.now(ZoneInfo('Asia/Taipei'))
 C = json.load(open('config.json', encoding='utf-8'))
 OFF = '--offline' in sys.argv
 TZ = 'Asia/Taipei'
@@ -45,41 +47,57 @@ def verdict(c, ma60):
     if c < ma60: return '季線下方整理', '⑤浪低點觀察中，站回季線才轉強'
     return '站回季線，反彈延續', '下一站 46,585、47,300'
 
-def chart(df, cf, ma60=None):
+def chart(df, cf, ma60=None, shift=0, proj=True, alt_op=0.4):
     n, ah = cf['n'], cf['ahead']; x = df.tail(n).reset_index()
     W, H, L, R, T, B = 400, 430, 6, 58, 12, 34
     tot = n + ah; X = lambda i: L + (i + .5) / tot * (W - L - R)
     last = float(x.Close.iloc[-1])
-    pr = [x.High.max(), x.Low.min()] + [p for _, p in cf['main'] + cf['alt']]
+    pr = [x.High.max(), x.Low.min()] + ([p + shift for _, p in cf['main'] + cf['alt']] if proj else [])
     lo, hi = min(pr) - 80, max(pr) + 80
     Y = lambda v: T + (hi - v) / (hi - lo) * (H - T - B)
     t0 = x.iloc[:, 0]
     s = ''
-    lv = list(cf['levels']) + ([[ma60, '季線']] if ma60 else [])
+    if 'night' in x:
+        i = 0
+        while i < len(x):
+            if x.night[i]:
+                j = i
+                while j + 1 < len(x) and x.night[j + 1]: j += 1
+                s += f'<rect x="{X(i)-.7:.1f}" y="{T}" width="{X(j)-X(i)+1.4:.1f}" height="{H-B-T}" fill="var(--mut)" opacity=".13"/>'
+                i = j
+            i += 1
+    lv = [[p + shift, nm] for p, nm in cf['levels']] + ([[ma60 + shift, '季線']] if ma60 else [])
     for p, nm in lv:
         if lo < p < hi:
             s += f'<line x1="{L}" x2="{W-R}" y1="{Y(p):.1f}" y2="{Y(p):.1f}" stroke="var(--line)" stroke-dasharray="3 3"/><text x="{W-R+3}" y="{Y(p)+3:.1f}" font-size="9" fill="var(--mut)">{p:,.0f} {nm}</text>'
     for i, r in x.iterrows():
         c = 'var(--up)' if r.Close >= r.Open else 'var(--dn)'
         s += f'<line x1="{X(i):.1f}" x2="{X(i):.1f}" y1="{Y(r.High):.1f}" y2="{Y(r.Low):.1f}" stroke="{c}" stroke-width=".8"/><line x1="{X(i):.1f}" x2="{X(i):.1f}" y1="{Y(max(r.Open,r.Close)):.1f}" y2="{Y(min(r.Open,r.Close))+.6:.1f}" stroke="{c}" stroke-width="{max(1.2,(W-L-R)/tot*.7):.1f}"/>'
-    days = [i for i in range(len(x)) if i == 0 or t0[i].date() != t0[i-1].date()]
-    ev = cf.get('tick_every', 1); pm = None
-    for k, i in enumerate(days):
-        s += f'<line x1="{X(i):.1f}" x2="{X(i):.1f}" y1="{T}" y2="{H-B}" stroke="var(--line)" stroke-width=".6"/>'
-        if (len(days) - 1 - k) % ev: continue
-        s += f'<text x="{X(i):.1f}" y="{H-19}" font-size="10" fill="var(--mut)" text-anchor="middle">{t0[i].day}</text>'
-        if t0[i].month != pm:
-            pm = t0[i].month
-            s += f'<text x="{max(X(i), 16):.1f}" y="{H-6}" font-size="10" font-weight="700" fill="var(--tx)" text-anchor="middle">{pm}月</text>'
+    dk = pd.to_datetime(x['tdate']) if 'tdate' in x else t0.dt.normalize()
+    if cf.get('xmode') == 'month':
+        for i in range(len(x)):
+            if i == 0 or dk[i].month != dk[i-1].month:
+                s += f'<line x1="{X(i):.1f}" x2="{X(i):.1f}" y1="{T}" y2="{H-B}" stroke="var(--line)" stroke-width=".6"/>'
+                s += f'<text x="{max(X(i), 14):.1f}" y="{H-12}" font-size="10" font-weight="700" fill="var(--tx)" text-anchor="middle">{dk[i].month}月</text>'
+    else:
+        days = [i for i in range(len(x)) if i == 0 or dk[i] != dk[i-1]]
+        ev = cf.get('tick_every', 1); pm = None
+        for k, i in enumerate(days):
+            s += f'<line x1="{X(i):.1f}" x2="{X(i):.1f}" y1="{T}" y2="{H-B}" stroke="var(--line)" stroke-width=".6"/>'
+            if (len(days) - 1 - k) % ev: continue
+            s += f'<text x="{X(i):.1f}" y="{H-19}" font-size="10" fill="var(--mut)" text-anchor="middle">{dk[i].day}</text>'
+            if dk[i].month != pm:
+                pm = dk[i].month
+                s += f'<text x="{max(X(i), 16):.1f}" y="{H-6}" font-size="10" font-weight="700" fill="var(--tx)" text-anchor="middle">{pm}月</text>'
     xn = X(len(x) - 1)
     s += f'<line x1="{xn:.1f}" x2="{xn:.1f}" y1="{T}" y2="{H-B}" stroke="var(--mut)" stroke-dasharray="2 3"/>'
-    for pts, col in ((cf['main'], 'var(--main)'), (cf['alt'], 'var(--alt)')):
+    for pts, col, op in (((cf['alt'], 'var(--gray)', alt_op), (cf['main'], 'var(--main)', 1)) if proj else ()):
         q = [(len(x) - 1, last)] + [(len(x) - 1 + k, p) for k, p in pts]
-        s += f'<polyline fill="none" stroke="{col}" stroke-width="2" stroke-dasharray="5 4" points="' + ' '.join(f'{X(i):.1f},{Y(p):.1f}' for i, p in q) + '"/>'
+        s += f'<polyline fill="none" stroke="{col}" stroke-opacity="{op}" stroke-width="2" stroke-dasharray="5 4" points="' + ' '.join(f'{X(i):.1f},{Y(p):.1f}' for i, p in q) + '"/>'
     w = []
-    for t, p, nm in cf['waves']:
+    for t, p, nm in (cf['waves_big'] if cf.get('show_big') and cf.get('waves_big') else cf['waves']):
         t = pd.Timestamp(t)
-        if t0.iloc[0] <= t <= t0.iloc[-1]: w.append((int(t0.searchsorted(t)), p, nm))
+        if t0.iloc[0] <= t <= t0.iloc[-1] + pd.Timedelta(minutes=30): w.append((max(0, int(t0.searchsorted(t, side='right')) - 1), p + shift, nm))
     if w:
         s += '<polyline fill="none" stroke="var(--tx)" stroke-width="1.6" points="' + ' '.join(f'{X(i):.1f},{Y(p):.1f}' for i, p, _ in w) + '"/>'
         for k, (i, p, nm) in enumerate(w):
@@ -96,10 +114,27 @@ if OFF:
 ma60 = float(D.Close.rolling(60).mean().iloc[-1])
 price = float(M.Close.iloc[-1]) if len(M) else float(D.Close.iloc[-1])
 vt, vx = verdict(price, ma60)
+if C.get('alt_strength') is not None: alt_s = float(C['alt_strength'])
+else:
+    alt_s = 0.2 + 0.15 * (price > ma60) + 0.15 * (price > C.get('alt_t1', 46585)) + 0.25 * (price > C['v']['w4']) + 0.25 * (price > C['v']['alt'])
+alt_s = min(1.0, alt_s); alt_op = round(0.25 + 0.75 * alt_s, 2)
+try:
+    import futures
+    f5, f60 = futures.load(list(D.index[-C.get('tick_days', 8):]) + ([pd.Timestamp(NOW.date())] if not OFF else []), OFF)
+    td = f5.tdate.max(); dd = f5[(f5.tdate == td) & ~f5.night]; nn = f5[(f5.tdate == td) & f5.night]
+    try: basis = float(dd.Close.iloc[-1] - D.Close.loc[td]) if len(dd) and td in D.index else 0.0
+    except Exception: basis = 0.0
+    strip = f'最新 {f5.Close.iloc[-1]:,.0f}｜期現價差約 {basis:+,.0f}（圖上價位已平移）'
+    if len(nn) and len(dd): strip += f'｜{td:%m/%d} 夜盤 收 {nn.Close.iloc[-1]:,.0f}（較日盤收 {nn.Close.iloc[-1]-dd.Close.iloc[-1]:+,.0f}），高 {nn.High.max():,.0f} 低 {nn.Low.max() and nn.Low.min():,.0f}'
+    cf60 = {**C['chart60'], **C.get('chartF60', {})}; cf5 = {**C['chart5'], **C.get('chartF5', {})}
+    cf60 = chart(f60, cf60, ma60, basis, False); cf5 = chart(f5, cf5, ma60, basis, False)
+except Exception as e:
+    strip = f'期貨資料暫時取不到：{e}'; cf60 = cf5 = '<p class="m">尚無資料</p>'
 html = Template(open('template.html', encoding='utf-8').read()).substitute(
-    vt=vt, vx=vx, price=f'{price:,.0f}', upd=datetime.now().strftime('%Y-%m-%d %H:%M'),
-    c60=chart(H, C['chart60'], ma60), c5=chart(M, C['chart5'], ma60),
-    n60=' ／ '.join(C['chart60']['names']), n5=' ／ '.join(C['chart5']['names']))
+    vt=vt, vx=vx, price=f'{price:,.0f}', upd=NOW.strftime('%Y-%m-%d %H:%M'),
+    c60=chart(H, C['chart60'], ma60, alt_op=alt_op), cd=chart(D, C['chartD'], ma60, alt_op=alt_op), alt=f'{alt_s*100:.0f}',
+    n60=' ／ '.join(C['chart60']['names']), nd=' ／ '.join(C['chartD']['names']),
+    strip=strip, f60=cf60, f5=cf5)
 open('docs/index.html', 'w', encoding='utf-8').write(html)
-json.dump({'price': price, 'verdict': vt, 'updated': datetime.now().isoformat()}, open('docs/data.json', 'w', encoding='utf-8'), ensure_ascii=False)
+json.dump({'price': price, 'verdict': vt, 'updated': NOW.isoformat()}, open('docs/data.json', 'w', encoding='utf-8'), ensure_ascii=False)
 print('ok', vt, round(price))
