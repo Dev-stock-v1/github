@@ -1,7 +1,8 @@
 name: update
 on:
   schedule:
-    - cron: '40 6 * * 1-5'
+    - cron: '40 21 * * 0-4'  # 台北 05:40（夜盤收盤後，補前一晚夜盤）
+    - cron: '40 7 * * 1-5'   # 台北 15:40（日盤收盤、期交所檔案上架後）
   workflow_dispatch:
 permissions:
   contents: read
