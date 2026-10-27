@@ -6,7 +6,7 @@
 ## 日常維護
 - 波浪計數是你的判斷，程式不會自動數浪。要改圖上的波浪、預估路徑、價位線，請編輯 config.json：
   `chart60` / `chart5` 內的 `waves`（[時間, 價位, 標籤]）、`main` / `alt`（[往後幾根K, 價位]）、`levels`、`tick_every`（日期標示間隔，60分K 為每 5 個交易日加當日）；`ref_low` 與 `v` 是頂端判斷文字的門檻。
-- 本機測試：`pip install -r requirements.txt`，然後 `python update.py --offline`（用 sample/ 內的 CSV，不需網路）。
+- 本機測試：`pip install -r requirements.txt`，然後 `python update.py --offline`。
 
 ## 注意
 - Yahoo 偶爾擋自動請求，失敗時 Actions 會顯示紅燈，重跑通常可解。
