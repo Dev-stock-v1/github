@@ -101,7 +101,8 @@
     "主標"
    ]
   ],
-  "tick_every": 5
+  "tick_every": 5,
+  "title": "60分K"
  },
  "chart5": {
   "n": 162,
@@ -206,7 +207,8 @@
     45460,
     "平台"
    ]
-  ]
+  ],
+  "title": "5分K"
  },
  "tick_days": 8,
  "chartF60": {
@@ -368,8 +370,14 @@
     "C①"
    ]
   ],
-  "show_big": false
+  "show_big": false,
+  "title": "日K",
+  "w_start": 26396
  },
  "alt_strength": null,
- "alt_t1": 46585
+ "alt_t1": 46585,
+ "rules": [
+  "主升段③價差不能比①、⑤短",
+  "①>③>⑤（大中小）時，指數容易拉回至少到①高～②低區間，可破②低"
+ ]
 }

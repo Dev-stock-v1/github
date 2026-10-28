@@ -47,6 +47,25 @@ def verdict(c, ma60):
     if c < ma60: return '季線下方整理', '⑤浪低點觀察中，站回季線才轉強'
     return '站回季線，反彈延續', '下一站 46,585、47,300'
 
+CIRC = {'①': 1, '②': 2, '③': 3, '④': 4, '⑤': 5}
+WARN = []
+
+def wave_check(wl, start=None):
+    """規則1：③不能比①、⑤短。規則2：①>③>⑤（大中小）→ 易拉回至少到①高～②低區間，可破②低。"""
+    lab = [CIRC.get(nm) for _, _, nm in wl]
+    if 1 not in lab: return None
+    i1 = lab.index(1)
+    p0 = wl[i1 - 1][1] if i1 > 0 else start
+    if p0 is None: return None
+    pr = {}
+    for i, k in enumerate(lab):
+        if k and k not in pr and i >= i1: pr[k] = wl[i][1]
+    g = lambda a, b: abs(pr[a] - pr[b]) if a in pr and b in pr else None
+    L1 = abs(pr[1] - p0); L3 = g(3, 2); L5 = g(5, 4)
+    v1 = L3 is not None and L5 is not None and L3 < L1 and L3 < L5
+    z = (pr[1], pr[2]) if 2 in pr and L3 is not None and L5 is not None and L1 > L3 > L5 else None
+    return {'v1': v1, 'z': z}
+
 def chart(df, cf, ma60=None, shift=0, proj=True, alt_op=0.4):
     n, ah = cf['n'], cf['ahead']; x = df.tail(n).reset_index()
     W, H, L, R, T, B = 400, 430, 6, 58, 12, 34
@@ -94,6 +113,12 @@ def chart(df, cf, ma60=None, shift=0, proj=True, alt_op=0.4):
     for pts, col, op in (((cf['alt'], 'var(--gray)', alt_op), (cf['main'], 'var(--main)', 1)) if proj else ()):
         q = [(len(x) - 1, last)] + [(len(x) - 1 + k, p) for k, p in pts]
         s += f'<polyline fill="none" stroke="{col}" stroke-opacity="{op}" stroke-width="2" stroke-dasharray="5 4" points="' + ' '.join(f'{X(i):.1f},{Y(p):.1f}' for i, p in q) + '"/>'
+    wl = cf['waves_big'] if cf.get('show_big') and cf.get('waves_big') else cf['waves']
+    ck = wave_check([(t, p, nm) for t, p, nm in wl], cf.get('w_start'))
+    if ck and ck['v1']: WARN.append(f"{cf.get('title', '')}：③短於①與⑤，違反規則")
+    if ck and ck['z']:
+        y1, y2 = Y(max(ck['z']) + shift), Y(min(ck['z']) + shift)
+        s += f'<rect x="{L}" y="{y1:.1f}" width="{W-L-R}" height="{y2-y1:.1f}" fill="var(--gray)" opacity=".18"/><text x="{L+3}" y="{y1+11:.1f}" font-size="9" fill="var(--mut)">拉回區（①高～②低，可破②低）</text>'
     w = []
     for t, p, nm in (cf['waves_big'] if cf.get('show_big') and cf.get('waves_big') else cf['waves']):
         t = pd.Timestamp(t)
@@ -119,9 +144,17 @@ else:
     alt_s = 0.2 + 0.15 * (price > ma60) + 0.15 * (price > C.get('alt_t1', 46585)) + 0.25 * (price > C['v']['w4']) + 0.25 * (price > C['v']['alt'])
 alt_s = min(1.0, alt_s); alt_op = round(0.25 + 0.75 * alt_s, 2)
 try:
-    import futures
-    f5, f60 = futures.load(list(D.index[-C.get('tick_days', 8):]) + ([pd.Timestamp(NOW.date())] if not OFF else []), OFF)
-    td = f5.tdate.max(); dd = f5[(f5.tdate == td) & ~f5.night]; nn = f5[(f5.tdate == td) & f5.night]
+    import mis, futures
+    st = mis.load_store()
+    if not OFF:
+        st = mis.merge(st, mis.collect(log=print))
+        if mis.sessions(st) < 6:                                  # 歷史不足時，用逐筆檔回補（失敗不影響）
+            try: st = mis.merge(mis.merge(st.iloc[0:0], futures.load_1m(list(D.index[-C.get('tick_days', 8):]), False)), st)
+            except Exception as e: print('futures 回補失敗：', e)
+        if len(st): mis.save_store(st)
+    if st.empty: raise RuntimeError('尚無期貨資料（MIS 與逐筆檔都取不到）')
+    f5, f60 = mis.bars(st, 5), mis.bars(st, 60)
+    td = f5[f5.night].tdate.max(); dd = f5[(f5.tdate == td) & ~f5.night]; nn = f5[(f5.tdate == td) & f5.night]
     try: basis = float(dd.Close.iloc[-1] - D.Close.loc[td]) if len(dd) and td in D.index else 0.0
     except Exception: basis = 0.0
     strip = f'最新 {f5.Close.iloc[-1]:,.0f}｜期現價差約 {basis:+,.0f}（圖上價位已平移）'
@@ -133,8 +166,8 @@ except Exception as e:
 html = Template(open('template.html', encoding='utf-8').read()).substitute(
     vt=vt, vx=vx, price=f'{price:,.0f}', upd=NOW.strftime('%Y-%m-%d %H:%M'),
     c60=chart(H, C['chart60'], ma60, alt_op=alt_op), cd=chart(D, C['chartD'], ma60, alt_op=alt_op), alt=f'{alt_s*100:.0f}',
-    n60=' ／ '.join(C['chart60']['names']), nd=' ／ '.join(C['chartD']['names']),
-    strip=strip, f60=cf60, f5=cf5)
+    n60=C['chart60']['names'][0] + '（橘色）／' + C['chart60']['names'][1] + '（灰色）', nd=C['chartD']['names'][0] + '（橘色）／' + C['chartD']['names'][1] + '（灰色）',
+    strip=strip, f60=cf60, f5=cf5, warn=''.join(f'　⚠ {w}' for w in WARN))
 open('docs/index.html', 'w', encoding='utf-8').write(html)
 json.dump({'price': price, 'verdict': vt, 'updated': NOW.isoformat()}, open('docs/data.json', 'w', encoding='utf-8'), ensure_ascii=False)
 print('ok', vt, round(price))
