@@ -7,9 +7,7 @@ body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 "Noto Sans TC",
 .m{color:var(--mut);font-size:12px}.tabs{display:flex;gap:8px;margin:0 0 10px}.tabs button{flex:1;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--tx)}.tabs button.on{background:var(--alt);color:#fff;border-color:var(--alt)}[hidden]{display:none!important}svg{width:100%;height:auto;display:block}.v b{font-size:17px}</style></head><body><main>
 <h1>指數推演</h1>
 <div class="card v"><b>$vt</b>　$vx<div class="m">最新價 $price ｜ 更新 $upd（台北）$warn</div></div>
-<div class="tabs"><button class="on" data-g="c">加權指數</button><button data-g="f">台指期（含夜盤）</button></div>
-<section data-s="c"><div class="card"><h2>日K</h2><div class="m">推測波形　$nd</div>$cd</div>
-<div class="card"><h2>60分K</h2><div class="m">推測波形　$n60</div>$c60</div></section>
-<section data-s="f" hidden><div class="card m">$strip<br>灰底為夜盤時段；波浪與價位線取自加權圖，依期現價差平移，僅供參考。</div>
-<div class="card"><h2>台指期 5分K</h2>$f5</div><div class="card"><h2>台指期 60分K</h2>$f60</div></section>
-<p class="m">個人研究工具，非投資建議。</p></main><script>document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('[data-s]').forEach(s=>s.hidden=s.dataset.s!==b.dataset.g)})</script></body></html>
+<div class="card"><h2>日K</h2><div class="m">推測波形　$nd</div>$cd</div>
+<div class="card"><h2>60分K</h2><div class="m">推測波形　$n60</div>$c60</div>
+<div class="card"><h2>5分K</h2><div class="m">推測波形　$n5</div>$c5</div>
+<p class="m">個人研究工具，非投資建議。</p></main></body></html>

@@ -143,31 +143,11 @@ if C.get('alt_strength') is not None: alt_s = float(C['alt_strength'])
 else:
     alt_s = 0.2 + 0.15 * (price > ma60) + 0.15 * (price > C.get('alt_t1', 46585)) + 0.25 * (price > C['v']['w4']) + 0.25 * (price > C['v']['alt'])
 alt_s = min(1.0, alt_s); alt_op = round(0.25 + 0.75 * alt_s, 2)
-try:
-    import mis, futures
-    st = mis.load_store()
-    if not OFF:
-        st = mis.merge(st, mis.collect(log=print))
-        if mis.sessions(st) < 6:                                  # 歷史不足時，用逐筆檔回補（失敗不影響）
-            try: st = mis.merge(mis.merge(st.iloc[0:0], futures.load_1m(list(D.index[-C.get('tick_days', 8):]), False)), st)
-            except Exception as e: print('futures 回補失敗：', e)
-        if len(st): mis.save_store(st)
-    if st.empty: raise RuntimeError('尚無期貨資料（MIS 與逐筆檔都取不到）')
-    f5, f60 = mis.bars(st, 5), mis.bars(st, 60)
-    td = f5[f5.night].tdate.max(); dd = f5[(f5.tdate == td) & ~f5.night]; nn = f5[(f5.tdate == td) & f5.night]
-    try: basis = float(dd.Close.iloc[-1] - D.Close.loc[td]) if len(dd) and td in D.index else 0.0
-    except Exception: basis = 0.0
-    strip = f'最新 {f5.Close.iloc[-1]:,.0f}｜期現價差約 {basis:+,.0f}（圖上價位已平移）'
-    if len(nn) and len(dd): strip += f'｜{td:%m/%d} 夜盤 收 {nn.Close.iloc[-1]:,.0f}（較日盤收 {nn.Close.iloc[-1]-dd.Close.iloc[-1]:+,.0f}），高 {nn.High.max():,.0f} 低 {nn.Low.max() and nn.Low.min():,.0f}'
-    cf60 = {**C['chart60'], **C.get('chartF60', {})}; cf5 = {**C['chart5'], **C.get('chartF5', {})}
-    cf60 = chart(f60, cf60, ma60, basis, False); cf5 = chart(f5, cf5, ma60, basis, False)
-except Exception as e:
-    strip = f'期貨資料暫時取不到：{e}'; cf60 = cf5 = '<p class="m">尚無資料</p>'
 html = Template(open('template.html', encoding='utf-8').read()).substitute(
     vt=vt, vx=vx, price=f'{price:,.0f}', upd=NOW.strftime('%Y-%m-%d %H:%M'),
     c60=chart(H, C['chart60'], ma60, alt_op=alt_op), cd=chart(D, C['chartD'], ma60, alt_op=alt_op), alt=f'{alt_s*100:.0f}',
     n60=C['chart60']['names'][0] + '（橘色）／' + C['chart60']['names'][1] + '（灰色）', nd=C['chartD']['names'][0] + '（橘色）／' + C['chartD']['names'][1] + '（灰色）',
-    strip=strip, f60=cf60, f5=cf5, warn=''.join(f'　⚠ {w}' for w in WARN))
+    c5=chart(M, C['chart5'], ma60, alt_op=alt_op), n5=C['chart5']['names'][0] + '（橘色）／' + C['chart5']['names'][1] + '（灰色）', warn=''.join(f'　⚠ {w}' for w in WARN))
 open('docs/index.html', 'w', encoding='utf-8').write(html)
 json.dump({'price': price, 'verdict': vt, 'updated': NOW.isoformat()}, open('docs/data.json', 'w', encoding='utf-8'), ensure_ascii=False)
 print('ok', vt, round(price))
